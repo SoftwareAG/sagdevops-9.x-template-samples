@@ -1,0 +1,4 @@
+<?xml version="1.0"?>
+<project xmlns="antlib:org.apache.tools.ant" basedir="." default="import" >
+	<import file="antcc/main.xml" />
+</project>

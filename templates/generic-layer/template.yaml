@@ -1,0 +1,98 @@
+alias: generic-layer
+description: Generic layer based on external snapshot templates
+
+environments:
+  default:                                  # defaults
+    # product and fix repositories
+    version:      "9.10"                    # 9.8+
+    repo.product: webMethods-${version}     # source product repository name, must be pre-registered
+    repo.spm:     ${repo.product}           # source product repo for SPM
+    repo.fix:     Empower                   # source fix repository name, must be pre-registered
+    repo.fix.spm: ${repo.fix}               # source fix repo for SPM
+
+    # Remote system configuration 
+
+    os.platform:  lnxamd64                  # remote machine OS platform code
+    os.username:  ${user.name}              # remote machine SSH username, default CCE process user account (as java system property)
+    os.password:  ${os.username}            # remote machine SSH password
+    os.auth.method: PASSWORD                # remote machine authentication method: PASSWORD,INTERACTIVE,CERTIFICATE
+    os.auth.key:  ${user.home}/.ssh/id_rsa  # default keyfile for CERTIFICATE auth method
+    os.port:      22                        # remote machine SSH port
+    install.dir:  /opt/softwareag           # suite installation directory
+
+    spm.port:       8092                    # SPM connection port
+    spm.secure:     false                   # Use HTTPS connection to SPM: true,false
+    spm.memory.max: 512                     # max mem
+    spm.configure:  [spm-tuneup]    
+    spm.fixes:      [wMFix.SPM]             # SPM/SUM/SD core fixes by default
+    spm.distribution: DEF                   # EXPERIMENTAL! distribution, ALL, DEF, MIN
+    spm.useImage:   true                    # EXPERIMENTAL! false for direct connection to the MASTER
+    
+    generic.configure: ${}                  # REQUIRED. List of external snapshot templates to apply
+    
+  dev:
+    spm.host:     localhost                 # local bootstrap
+    spm.alias:    dev                       # alias                  
+    spm.port:     8192                      # Non-default port number to avoid conflicts
+    os.platform:  ""                        # force local platform
+    install.dir:  ${}
+    
+  server:  
+    
+  layer:
+    spm.hosts:    ${}                       # REQUIRED. list of hosts for generic layer            
+    
+layers:
+  default:
+    productRepo: ${repo.product}            # install products from
+    fixRepo:     ${repo.fix}                # install fixes from
+  spm:
+    description: Management layer of SPM's
+    templates:   ${spm.configure}
+    productRepo: ${repo.product}
+    fixRepo:     ${repo.fix.spm}
+  generic:
+    description: Generic layer defined by external templates
+    templates:   ${generic.configure}
+
+templates:
+  spm-tuneup:
+    description: SPM customizations
+    fixes: ${spm.fixes}
+    products:
+      SUM:
+
+provision:
+  default:
+    spm:     ["${spm.host}"]
+    generic: ["${spm.host}"]
+  dev:
+    spm:     ["${spm.alias}"]
+    generic: ["${spm.alias}"]
+  server:
+    spm:     ["${spm.host}"]
+    generic: ["${spm.host}"]
+  layer:
+    spm:     ${spm.hosts}
+    generic: ${spm.hosts}
+
+nodes:
+  default:
+    default:
+      port:   ${spm.port}
+      secure: ${spm.secure}
+      bootstrapInfo:
+        installDir:   ${install.dir}
+        repoName:     ${repo.spm}                     
+        platform:     ${os.platform}
+        distribution: ${spm.distribution}
+        useImage:     ${spm.useImage}
+        port:         ${os.port}
+        credentials:
+          userName:   ${os.username}
+          password:   ${os.password}
+          authenticationMethod: ${os.auth.method}
+          privateKey: ${os.auth.key}
+  dev:
+    ${spm.alias}:
+      host: ${spm.host}

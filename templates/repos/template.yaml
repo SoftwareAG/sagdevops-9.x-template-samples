@@ -1,0 +1,33 @@
+alias: repos
+description: Default master repositories registration
+version: 1.2
+changes:
+  - 1.0 Initial version shipped with 9.8
+  - 1.1 Added webMethods-9.9
+  - 1.2 Add webMethods-9.10 and removed pre 9.8 repositories
+
+environments:
+  default:                      # Input parameters
+    empower.username: ${}       # REQUIRED, username on https://empower.softwareag.com/
+    empower.password: ${}       # REQUIRED, password
+
+repositories:
+  product:                      # all supported product releases
+    webMethods-9.12:            # alternative location is http://sdc-hq.softwareag.com/dataservewebM912/repository/ 
+      location: http://sdc.softwareag.com/dataservewebM912/repository/
+      username: ${empower.username}
+      password: ${empower.password}
+    webMethods-9.10:
+      username: ${empower.username}
+      password: ${empower.password}
+    webMethods-9.9:
+      username: ${empower.username}
+      password: ${empower.password}
+    webMethods-9.8:
+      username: ${empower.username}
+      password: ${empower.password}
+ 
+  fix:                          # public fix repository for all versions
+    Empower:
+      username: ${empower.username}
+      password: ${empower.password}

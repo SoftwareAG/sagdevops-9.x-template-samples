@@ -1,0 +1,707 @@
+alias: bpms
+description: BPMS environment with UM,TC,BPM,MWS layers/clusters
+version: 1.2
+changes:
+  - 1.0 v9.8  Initial version
+  - 1.1 v9.8  Removed dedicated variables for each MWS host for cluster environment. Use mws.hosts=[] array instead
+  - 1.2 v9.10 Removed esb layer, added DB management, added license key aliases, terracotta configuration changes
+  
+environments:
+  default:                                  # defaults
+    # product and fix repositories
+    version:      "9.10"                    # MUST be 9.8+
+    repo.product: webMethods-${version}     # source product repository name, must be pre-registered
+    repo.spm:     ${repo.product}           # source product repo for SPM, can be bootstrap image
+    repo.fix:     Empower                   # source fix repository name, must be pre-registered
+    repo.fix.spm: ${repo.fix}               # source fix repo for SPM, can be bootstrap image
+
+    # Remote system configuration 
+
+    os.platform:  lnxamd64                  # remote machine OS platform code
+    os.username:  ${user.name}              # remote machine SSH username, default CCE process user account (as java system property)
+    os.password:  ${os.username}            # remote machine SSH password
+    os.auth.method: PASSWORD                # remote machine authentication method: PASSWORD,INTERACTIVE,CERTIFICATE
+    os.auth.key:  ${user.home}/.ssh/id_rsa  # keyfile for CERTIFICATE auth method
+    os.port:      22                        # remote machine SSH port
+    install.dir:  /opt/softwareag           # suite installation directory
+
+    spm.port:       8092                    # SPM connection port
+    spm.secure:     false                   # Use HTTPS connection to SPM: true,false
+    spm.memory.max: 512                     # max mem
+    spm.configure:  [spm-tuneup]    
+    spm.fixes:      [wMFix.SPM]             # SPM/SUM/SD core fixes by default
+    spm.distribution: DEF                   # EXPERIMENTAL! distribution, ALL, DEF, MIN
+    spm.useImage:     true                  # EXPERIMENTAL! false for direct connection to the MASTER repo!
+    
+    spm.host:           ${}                 # REQUIRED for all in one installation as default host
+    
+    # Database. See dbc template for parameters documentation
+    
+    dbc.alias:           local              # database configurator node
+    dbc.host:            localhost          # database configurator host
+    dbc.fixes:           ALL                # fixes for database configurator
+    dbc.configure:       [dbc]              
+    
+    # Database connection. 
+    
+    db.type:             ${}                # REQUIRED: Database type: oracle,sqlserver,db2
+    db.host:             ${}                # REQUIRED: Database server hostname
+    db.port:             ${}                # REQUIRED: Database server port
+    db.name:             WEBM               # Database name
+    db.username:         ${db.name}         # Database username
+    db.password:         ${db.name}         # Database password
+    db.url:              "jdbc:wm:${db.type}://${db.host}:${db.port};databaseName=${db.name}"
+
+    # Database server admin connection for storage/user creation
+
+    db.admin.username:   ${}                # REQUIRED: for db storage only
+    db.admin.password:   ${}                # REQUIRED: for db storage only
+    db.tablespace.dir:   ${}                # REQUIRED: for Oracle/DB2
+    db.tablespace.data:  WEBMDATA           # for Oracle/DB2
+    db.tablespace.index: WEBMINDX           # for Oracle/DB2
+    
+    # Schemas
+    
+    db.components:       [STR]              # Storage and all components by default
+    db.products:         [IS,BPM,MWS]                 
+    db.component.version: latest 
+    db.product.version:   latest
+
+    env.password:        manage             # IS/MWS Administrator password
+    
+    # Universal Messaging Server. See um-layer template for parameters documentation
+
+    um.host:             ${spm.host}
+    um.instance.port:    9000               
+    um.memory.init:      256                
+    um.memory.max:       1024               
+    um.memory.direct:    1G                 
+    um.cluster:          cluster
+    um.configure:        [um-server]
+    um.fixes:            ALL
+    um.license.key.alias: ${}               # REQUIRED UM license
+    um.cluster.url:      nsp://${um.host}:${um.instance.port}
+    um.jndi.cf:          um_local
+    
+    # Terracotta Server. See tc-layer template for parameters documentation
+
+    tc.host:             ${spm.host}
+    tc.tsa.port:         9010
+    tc.jmx.port:         9020
+    tc.grp.port:         9030
+    tc.mgt.port:         9040
+    tc.memory.init:      2024
+    tc.memory.max:       2024
+    tc.storage.size:     50g
+    tc.offheap.size:     2g
+    tc.configure:        [tc-server]
+    tc.fixes:            ALL
+    tc.license.key.alias: ${}               # REQUIRED
+
+    # Integration Server. See is-layer template for parameters documentation
+    
+    bpm.host:            ${spm.host}        
+    is.instance.name:    default            # IS BPM instance
+    is.primary.port:     5555
+    is.diagnostic.port:  9999
+    is.jmx.port:         8094
+    is.install.service:  true
+    is.memory.init:      256                # memory configuration
+    is.memory.max:       1024               # memory configuration
+    is.lb.protocol:      HTTP               # external load balancer protocol
+    is.lb.host:          ${bpm.host}        # external load balancer host
+    is.lb.port:          ${is.primary.port} # external load balancer port
+    is.fixes:            ALL
+    is.configure:        [bpm-server]
+    is.cluster.enabled:  true
+    is.tsa.url:          ${tc.host}:${tc.tsa.port}
+    
+    is.license.key.alias:    ${}
+    rules.license.key.alias: ${}
+ 
+    # My webMethods Server. See mws-layer template for parameters documentation
+    
+    mws.host:            ${spm.host}
+    mws.instance.name:   default
+    mws.http.port:       8585
+    mws.https.port:      8586
+    mws.jmx.port:        8587
+    mws.memory.init:     512                # memory configuration
+    mws.memory.max:      1024               # memory configuration
+    mws.lb.protocol:     http
+    mws.lb.host:         ${mws.host}
+    mws.lb.http.port:    ${mws.http.port}
+    mws.lb.https.port:   ${mws.https.port}
+    mws.fixes:           ALL
+    mws.configure:       [mws-server]
+
+  dev:
+    spm.host:     localhost
+    spm.alias:    dev                       # alias                  
+    spm.port:     8192                      # Non-default port number to avoid conflicts
+    os.platform:  ""                        # local platform
+    install.dir:  ${}                       # REQUIRED installation folder on local machine
+
+    tc.memory.init:      1024
+    tc.memory.max:       1024
+    um.memory.init:      128
+    um.memory.max:       512
+    um.memory.direct:    512m
+    is.memory.init:      128
+    is.memory.max:       512
+    mws.memory.init:     128
+    mws.memory.max:      512
+  
+  server:                # at least one host
+      
+  cluster:               # at least two hosts
+    spm.host:            ${um.host2}
+    um.host2:            ${}                     # REQUIRED second hostname
+    um.configure:        [um-server, um-cluster] # Configure server and cluster
+    um.cluster:          cluster                 # Cluster name
+    um.cluster.url:      nsp://${um.host}:${um.instance.port},nsp://${um.host2}:${um.instance.port}
+    
+    tc.host2:            ${}                     # REQUIRED second hostname
+    tc.configure:        [tc-server, tc-cluster]
+    
+    bpm.hosts:           ["${bpm.host}"]
+    mws.hosts:           ["${mws.host}"]         
+
+    spm.hosts:           ["${um.host}","${um.host2}","${tc.host}","${tc.host2}","${bpm.host}","${mws.host}"]
+
+###
+# Layers - groups of identically setup nodes to perform specific role
+# within this environment
+### 
+
+layers:
+  default:                                  # default configuration for all layers
+    productRepo: ${repo.product}            # repo to install products from
+    fixRepo:     ${repo.fix}                # repo to install fixes from
+ 
+  spm:
+    description: Management layer of SPM's
+    fixRepo:     ${repo.fix.spm}            # repo to install fixes from
+    templates:   ${spm.configure}
+
+  dbc:
+    description: Database configuration
+    templates:   ${dbc.configure}
+    databases:
+      dbc-components:
+        components:  ${db.components}
+        version:     ${db.component.version}
+        db.type:     ${db.type}
+        db.url:      ${db.url}
+        db.username: ${db.username}
+        db.password: ${db.password}
+        db.name:     ${db.name}
+        db.admin.username: ${db.admin.username}
+        db.admin.password: ${db.admin.password}
+        db.tablespace.dir: ${db.tablespace.dir}
+        db.tablespace.data: ${db.tablespace.data}
+        db.tablespace.index: ${db.tablespace.index}
+
+      dbc-products:
+        products:    ${db.products}
+        version:     ${db.product.version}
+        db.type:     ${db.type}
+        db.url:      ${db.url}
+        db.username: ${db.username}
+        db.password: ${db.password}
+        db.name:     ${db.name}
+
+  um:                                      
+    description: Messaging Layer based on Universal Messaging cluster
+    templates:   ${um.configure}
+      
+  tc:
+    description: Cache Layer based on Terracotta Server Array cluster
+    templates:   ${tc.configure}
+  
+  bpm:
+    description: Business Process Management layer based on Integration Server
+    templates:   ${is.configure}
+      
+  mws:
+    description: User Interface layer based on My webMethods Server
+    templates:   ${mws.configure}
+
+
+###
+# Inline templates - customized product list, fix list, runtime instances, files and configuration
+###
+
+templates:
+
+# Platform Manager
+
+  spm-tuneup:
+    description: SPM customizations
+    fixes:       ${spm.fixes}
+    products:
+      SUM:       # Ensure we have SUM installed
+      SPM:
+      # super set of all plugins
+      TESspm:
+      MWSspm:
+      ISspm:
+      PIFspm:
+      NUMspm:
+      WMNspm:
+      WOKspm:
+      EDAspm:
+      WOKMWSspm:
+      MwsSpmIsTask:
+      MwsSpmTaskEngine:
+
+# Database Configuration
+
+  dbc:
+    description: Database Configurator
+    products:
+      DatabaseComponentConfigurator:
+
+# Universal Messaging
+
+  um-server:                                   
+    description: First UM server instance
+    licenses:
+      "UniversalMessaging/server/templates/licence.xml": ${um.license.key.alias} 
+    fixes: ${um.fixes}
+    products:
+      NUMRealmServer:                                              # main UM product id
+        ${node.host}:                                              # instance realm name
+          instance.port: ${um.instance.port}                       # instance port
+          instance.ip:   ${node.host}
+          license.file:  UniversalMessaging/server/templates/licence.xml
+          runtimeComponentId: Universal-Messaging-${instance.name} # hint for CC to skip instance creation if it exists
+          configuration:
+            Universal-Messaging-${instance.name}: 
+              COMMON-MEMORY:                                       # make a label to re-use configuration
+                COMMON-MEMORY:                                     # customize JVM memory
+                  InitSize: ${um.memory.init}
+                  MaxSize:  ${um.memory.max}
+                  ExtendedProperties:                              # extended JVM setting
+                    Property: 
+                      - 
+                       "@name": "-XX:MaxDirectMemorySize"
+                       $: ${um.memory.direct}
+
+  um-cluster:
+    description: Cluster configuration for two 9.10+ UM instances
+    products:
+      NUMRealmServer:
+        ${node.host}:
+          runtimeComponentId: Universal-Messaging-${instance.name} 
+          configuration:
+            Universal-Messaging-${instance.name}:
+              COMMON-CLUSTER:                       
+                COMMON-CLUSTER: &umClusterConfig   
+                  Name: ${um.cluster}
+                  Servers:                                      # two UM instances cluster
+                    Server:
+                      - 
+                        "@name": ${um.host}
+                        URL: "nsp://${um.host}:${um.instance.port}"
+                      - 
+                        "@name": ${um.host2}
+                        URL: "nsp://${um.host2}:${um.instance.port2}"
+                
+# Terracotta Server 
+
+  tc-server:
+    licenses:
+      "Terracotta/terracotta-license.key": ${tc.license.key.alias} 
+    fixes: ${tc.fixes}
+    products:
+      TES:
+        default:
+          configuration:
+            TES-default:
+              COMMON-MEMORY:
+                COMMON-MEMORY:
+                  InitSize: ${tc.memory.init}
+                  MaxSize:  ${tc.memory.max}
+              TC-CONFIG:
+                TC-CONFIG: |
+                  <ns2:tc-config xmlns:ns2="http://www.terracotta.org/config">
+                    <servers>
+                      <server name="${node.host}" host="${node.host}" >
+                        <data>../data</data>
+                        <logs>../logs</logs>
+                        <index>../index</index>
+                        <tsa-port>${tc.tsa.port}</tsa-port>
+                        <jmx-port>${tc.jmx.port}</jmx-port>
+                        <tsa-group-port>${tc.grp.port}</tsa-group-port>
+                        <management-port>${tc.mgt.port}</management-port> 
+                        <dataStorage size="${tc.storage.size}"> 
+                           <offheap size="${tc.offheap.size}"/> 
+                           <hybrid/> 
+                        </dataStorage>
+                      </server>
+                    </servers>
+                  </ns2:tc-config>
+              TC-SERVER-NAME:
+                TC-SERVER-NAME:
+                  serverName: ${node.host}
+
+  tc-cluster:
+    products:
+      TES:
+        default:
+          configuration:
+            TES-default:
+              TC-CONFIG:
+                TC-CONFIG: |
+                  <ns2:tc-config xmlns:ns2="http://www.terracotta.org/config">
+                    <servers>
+                      <mirror-group group-name="stripe1">
+                          <server name="${tc.host}" host="${tc.host}" >
+                            <data>../data</data>
+                            <logs>../logs</logs>
+                            <index>../index</index>
+                            <tsa-port>${tc.tsa.port}</tsa-port>
+                            <jmx-port>${tc.jmx.port}</jmx-port>
+                            <tsa-group-port>${tc.grp.port}</tsa-group-port>
+                            <management-port>${tc.mgt.port}</management-port> 
+                            <dataStorage size="${tc.storage.size}"> 
+                               <offheap size="${tc.offheap.size}"/> 
+                               <hybrid/> 
+                            </dataStorage>
+                          </server>
+                          <server name="${tc.host2}" host="${tc.host2}" >
+                            <data>../data</data>
+                            <logs>../logs</logs>
+                            <index>../index</index>
+                            <tsa-port>${tc.tsa.port}</tsa-port>
+                            <jmx-port>${tc.jmx.port}</jmx-port>
+                            <tsa-group-port>${tc.grp.port}</tsa-group-port>
+                            <management-port>${tc.mgt.port}</management-port> 
+                            <dataStorage size="${tc.storage.size}"> 
+                               <offheap size="${tc.offheap.size}"/> 
+                               <hybrid/> 
+                            </dataStorage>
+                          </server>
+                      </mirror-group>
+                    </servers>
+                  </ns2:tc-config>
+  
+  bpm-server: # Custom IS BPM setup
+    description: BPM layer can be single server or a cluster
+    licenses:
+      "IntegrationServer/config/licenseKey.xml": ${is.license.key.alias} 
+      "IntegrationServer/instances/${is.instance.name}/packages/WmBusinessRules/config/licenseKey.xml": ${rules.license.key.alias} 
+      "common/conf/terracotta-license.key": ${tc.license.key.alias} 
+    fixes: ${is.fixes}
+    products:
+      brmspackage:
+      Monitor:
+      TaskClientPackage:
+      Deployer:
+      NUMDeployer:
+      wmprt:
+      integrationServer: # the core IS product that owns the instance
+        ${is.instance.name}:
+          primary.port:    ${is.primary.port}
+          diagnostic.port: ${is.diagnostic.port}
+          jmx.port:        ${is.jmx.port}
+          license.file:    IntegrationServer/config/licenseKey.xml
+          install.service: ${is.install.service}
+          package.list:    WmMonitor,WmTaskClient,WmBusinessRules,WmDeployer,WmNUMDeployer,WmPRT
+          db.type:         ${db.type}
+          db.url:          "${db.url}"
+          db.username:     ${db.username}
+          db.password:     ${db.password}
+          db.alias:        Default
+          configuration:
+            OSGI-IS_${instance.name}:
+              COMMON-MEMORY:
+                COMMON-MEMORY:
+                  InitSize: ${is.memory.init}
+                  MaxSize: ${is.memory.max}
+            integrationServer-${instance.name}:
+              COMMON-JNDI:
+                COMMON-JNDI-DEFAULT_IS_JNDI_PROVIDER:
+                  JNDI: 
+                    "@alias": DEFAULT_IS_JNDI_PROVIDER
+                    Description: Default JNDI provider alias
+                    Provider: 
+                      URL: "${um.cluster.url}"
+                      InitialContextFactory: com.pcbsys.nirvana.nSpace.NirvanaContextFactory
+              COMMON-WMMESSAGING:
+                COMMON-WMMESSAGING-IS_UM_CONNECTION:
+                  Messaging: 
+                    "@alias": IS_UM_CONNECTION
+                    Description: Default UM connection alias
+                    ClientPrefix: IS_UM
+                    ShareClientPrefix: false
+                    Enabled: true
+                    Provider: 
+                      "@type": UM
+                      URL: "${um.cluster.url}"
+                      MaxRetryAttempts: 5
+                      RetryInterval: 30000
+              COMMON-JMS:
+                COMMON-JMS-DEFAULT_IS_JMS_CONNECTION:
+                  JMS: 
+                    "@alias": DEFAULT_IS_JMS_CONNECTION
+                    Description: Default JMS connection alias
+                    Enabled: true
+                    TransactionType: NO_TRANSACTION
+                    ClientId: DEFAULT_IS_JMS_CLIENT
+                    Provider: 
+                      "@type": JNDI
+                      JNDIAlias: DEFAULT_IS_JNDI_PROVIDER
+                      JNDIConnectionFactoryName: ${um.jndi.cf}
+                    User: ""
+                    MaxRetryAttempts: 0
+                    RetryInterval: 0
+                    Caching: DISABLED
+                    ExtendedProperties: 
+                      Property: 
+                        - 
+                          "@name": "jndi_connectionFactoryUpdateType"
+                          $: "NONE"
+                        - 
+                          "@name": "jndi_connectionFactoryPollingInterval"
+                          $: "0"
+                        - 
+                          "@name": "classLoader"
+                          $: "INTEGRATION_SERVER"
+                        - 
+                          "@name": "csqSize"
+                          $: "-1"
+                        - 
+                          "@name": "csqDrainInOrder"
+                          $: "true"
+                        - 
+                          "@name": "optTempQueueCreate"
+                          $: "true"
+                        - 
+                          "@name": "manageDestinations"
+                          $: "true"
+                        - 
+                          "@name": "allowNewConnectionPerTrigger"
+                          $: "false"
+                COMMON-JMS-PE_NONTRANSACTIONAL_ALIAS:
+                  JMS: 
+                    "@alias": PE_NONTRANSACTIONAL_ALIAS
+                    Description: Default PE JMS connection alias
+                    Enabled: true
+                    TransactionType: NO_TRANSACTION
+                    ClientId: IS_PE
+                    Provider: 
+                      "@type": JNDI
+                      JNDIAlias: DEFAULT_IS_JNDI_PROVIDER
+                      JNDIConnectionFactoryName: ${um.jndi.cf}
+                    User: ""
+                    MaxRetryAttempts: 0
+                    RetryInterval: 0
+                    Caching: DISABLED
+                    ExtendedProperties: 
+                      Property: 
+                        - 
+                          "@name": "jndi_connectionFactoryUpdateType"
+                          $: "NONE"
+                        - 
+                          "@name": "jndi_connectionFactoryPollingInterval"
+                          $: "0"
+                        - 
+                          "@name": "classLoader"
+                          $: "INTEGRATION_SERVER"
+                        - 
+                          "@name": "csqSize"
+                          $: "-1"
+                        - 
+                          "@name": "csqDrainInOrder"
+                          $: "true"
+                        - 
+                          "@name": "optTempQueueCreate"
+                          $: "true"
+                        - 
+                          "@name": "manageDestinations"
+                          $: "true"
+                        - 
+                          "@name": "allowNewConnectionPerTrigger"
+                          $: "false"
+              COMMON-DBFUNCTION:
+                COMMON-DBFUNCTION-CentralUsers:
+                  Function:
+                    "@alias": CentralUsers
+                    PoolAlias: Default
+                    Description: "Central User Management Configuration"
+              COMMON-CLUSTER:
+                COMMON-CLUSTER:
+                  Name: ${instance.name}-cluster
+                  Enabled: ${is.cluster.enabled}
+                  Servers:
+                    Server: 
+                      - 
+                        URL: ${is.tsa.url} 
+
+            OSGI-IS_${instance.name}-WmMonitor: &MwsEndpoint
+              COMMON-COMPONENT-ENDPOINTS:
+                COMMON-COMPONENT-ENDPOINTS-MWS:
+                  "@alias": MWS
+                  Transport:
+                    Protocol: ${mws.lb.protocol}
+                    Host:     ${mws.lb.host}
+                    Port:     ${mws.lb.http.port}
+                  Auth:
+                    "@type": BASIC
+                    User: Administrator
+                    Password: ${env.password}
+            OSGI-IS_${instance.name}-WmTaskClient: *MwsEndpoint
+                  
+  mws-server:
+    description: UI layer can be single server or a cluster
+    fixes: ${mws.fixes}
+    products:
+      TaskEngineRuntime:
+      brmsui:
+      optimizeSharedUI:
+      monitorUI:
+      MwsProgramFiles: # MWS core product
+        ${mws.instance.name}: # MWS instance
+          node.name:   ${node.host} # unique cluster node name
+          http.port:   ${mws.http.port}
+          https.port:  ${mws.https.port}
+          jmx.port:    ${mws.jmx.port}
+          db.type:     ${db.type}
+          db.url:      "${db.url}"
+          db.username: ${db.username}
+          db.password: ${db.password}
+          configuration:
+            OSGI-MWS_${instance.name}:
+              COMMON-MEMORY:
+                COMMON-MEMORY:
+                  InitSize: ${mws.memory.init}
+                  MaxSize:  ${mws.memory.max}
+            MwsProgramFiles-${instance.name}:
+              COMMON-CLUSTER:
+                COMMON-CLUSTER:
+                  ExtendedProperties:
+                    Property:
+                      -
+                        "@name": LoadBalancerHost
+                        $: ${mws.lb.host}
+                      -
+                        "@name": LoadBalancerHttpPort
+                        $: ${mws.lb.http.port}
+                      -
+                        "@name": LoadBalancerHttpsPort
+                        $: ${mws.lb.https.port}
+                      -
+                        "@name": jndiEnabled
+                        $: true
+                      -
+                        "@name": jndiProviderUrl
+                        $: ${um.cluster.url}
+              COMMON-SYSPROPS:
+                COMMON-SYSPROPS: |
+                  update.completed.task=true
+                  task.based.permission=false
+            MwsProgramFiles-${instance.name}:
+              COMMON-VARS:
+                COMMON-VARS-wsclient-password:
+                  Variable: 
+                    "@key": "wsclient-password"
+                    "@secure": "true"
+                    "@type": "java.lang.String"
+                    $: ${env.password}
+                COMMON-VARS-wsclient-username:
+                  Variable: 
+                    "@key": "wsclient-username"
+                    "@secure": "false"
+                    "@type": "java.lang.String"
+                    $: Administrator
+            TaskEngineRuntime-${instance.name}:
+              COMMON-COMPONENT-ENDPOINTS:
+                COMMON-COMPONENT-ENDPOINTS-TASKENGINE:
+                  "@alias": TASKENGINE
+                  Transport:
+                    Protocol: ${is.lb.protocol}
+                    Host:     ${is.lb.host}
+                    Port:     ${is.lb.port}
+                  Auth:
+                    "@type": BASIC
+                    User: Administrator
+                    Password: ${env.password}
+            brmsui-${instance.name}:
+              COMMON-COMPONENT-ENDPOINTS:
+                COMMON-COMPONENT-ENDPOINTS-Default:
+                  "@alias": Default
+                  Description: Default
+                  Transport:
+                    Protocol: ${is.lb.protocol}
+                    Host:     ${is.lb.host}
+                    Port:     ${is.lb.port}
+                  Auth:
+                    "@type": BASIC
+                    User: Administrator
+                    Password: ${env.password}
+            optimizeSharedUI-${instance.name}:
+              COMMON-COMPONENT-ENDPOINTS:
+                COMMON-COMPONENT-ENDPOINTS-IS-BPMonly:
+                  "@alias": IS-BPMonly
+                  Description: "BPM only"
+                  Transport:
+                    Protocol: ${is.lb.protocol}
+                    Host:     ${is.lb.host}
+                    Port:     ${is.lb.port}
+                  Auth:
+                    "@type": AUTO 
+
+###
+# Provisioning map of layers to nodes for each environment type
+###
+
+provision:
+  dev:
+    spm:   ["${spm.alias}"]
+    dbc:   ["${dbc.alias}"]
+    um:    ["${spm.alias}"]
+    tc:    ["${spm.alias}"]
+    bpm:   ["${spm.alias}"]
+    mws:   ["${spm.alias}"]
+
+  server:
+    spm:   ["${spm.host}"]
+    dbc:   ["${dbc.alias}"]
+    um:    ["${um.host}" ]
+    tc:    ["${tc.host}" ]
+    bpm:   ["${bpm.host}" ]
+    mws:   ["${mws.host}"]
+
+  cluster:
+    spm:   ${spm.hosts}
+    dbc:   ["${dbc.alias}"]
+    um:    ["${um.host}", "${um.host2}"]
+    tc:    ["${tc.host}", "${tc.host2}"]
+    bpm:   ${bpm.hosts}
+    mws:   ${mws.hosts}
+
+nodes:
+  default:
+    default:
+      port:   ${spm.port}
+      secure: ${spm.secure}
+      bootstrapInfo:
+        installDir:   ${install.dir}
+        repoName:     ${repo.spm}                     
+        platform:     ${os.platform}
+        distribution: ${spm.distribution}
+        useImage:     ${spm.useImage}
+        port:         ${os.port}
+        credentials:
+          userName:   ${os.username}
+          password:   ${os.password}
+          authenticationMethod: ${os.auth.method}
+          privateKey: ${os.auth.key}
+  
+  dev:
+    ${spm.alias}:
+      host: ${spm.host}
+ 
+ 

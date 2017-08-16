@@ -1,0 +1,145 @@
+alias: dbc
+description: Database Configurator
+version: 1.0
+changes:
+  - 1.0 Initial schema management. Requires 9.10 node
+
+environments:
+  default:                                  # defaults
+    # product and fix repositories
+    version:      "9.10"                    # MUST be 9.10+
+    repo.product: webMethods-${version}     # source product repository name, must be pre-registered
+    repo.spm:     ${repo.product}           # source product repo for SPM
+    repo.fix:     Empower                   # source fix repository name, must be pre-registered
+    repo.fix.spm: ${repo.fix}               # source fix repo for SPM
+
+    # Remote system configuration 
+
+    os.platform:  lnxamd64                  # remote machine OS platform code
+    os.username:  ${user.name}              # remote machine SSH username, default CCE process user account (as java system property)
+    os.password:  ${os.username}            # remote machine SSH password
+    os.auth.method: PASSWORD                # remote machine authentication method: PASSWORD,INTERACTIVE,CERTIFICATE
+    os.auth.key:  ${user.home}/.ssh/id_rsa  # default keyfile for CERTIFICATE auth method
+    os.port:      22                        # remote machine SSH port
+    install.dir:  /opt/softwareag           # suite installation directory
+
+    spm.port:       8092                    # SPM connection port
+    spm.secure:     false                   # Use HTTPS connection to SPM: true,false
+    spm.memory.max: 512                     # max mem
+    spm.configure:  [spm-tuneup]    
+    spm.fixes:      [wMFix.SPM]             # SPM/SUM/SD core fixes by default
+    spm.distribution: DEF                   # EXPERIMENTAL! distribution, ALL, DEF, MIN
+    spm.useImage:   true                    # EXPERIMENTAL! false for direct connection to the MASTER
+
+    dbc.alias:           local
+    dbc.host:            localhost
+    dbc.fixes:           ALL
+    dbc.configure:       [dbc]
+    
+    # Database connection
+    
+    db.type:             ${}                # REQUIRED: Database type: oracle,sqlserver,db2
+    db.host:             ${}                # REQUIRED: Database server hostname
+    db.port:             ${}                # REQUIRED: Database server port
+    db.name:             WEBM               # Database name
+    db.username:         ${db.name}         # Database username
+    db.password:         ${db.name}         # Database password
+    db.url:              "jdbc:wm:${db.type}://${db.host}:${db.port};databaseName=${db.name}"
+
+    # Database server admin connection for storage/user creation
+
+    db.admin.username:   ${}                # REQUIRED: for db storage only
+    db.admin.password:   ${}                # REQUIRED: for db storage only
+    db.tablespace.dir:   ${}                # REQUIRED: for Oracle/DB2
+    db.tablespace.data:  WEBMDATA           # for Oracle/DB2
+    db.tablespace.index: WEBMINDX           # for Oracle/DB2
+    
+    # Schemas
+    
+    db.components:        [STR, ALL]         # Storage and all components by default
+    db.products:          [] 
+    db.component.version: latest 
+    db.product.version:   latest
+  
+  dev:
+    spm.alias:    dev                       # alias                  
+    spm.port:     8192                      # Non-default port number to avoid conflicts
+    os.platform:  ""                        # local platform
+    install.dir:  ${}                       # REQUIRED installation folder on local machine
+
+layers:
+  default:
+    productRepo: ${repo.product}            # install products from
+    fixRepo:     ${repo.fix}                # install fixes from
+  spm:
+    description: Management layer of SPM's
+    templates:   ${spm.configure}
+    productRepo: ${repo.product}
+    fixRepo:     ${repo.fix.spm}
+  dbc:
+    templates:   ${dbc.configure}
+    databases:
+      dbc-components:
+        components:  ${db.components}
+        version:     ${db.component.version}
+        db.type:     ${db.type}
+        db.url:      ${db.url}
+        db.username: ${db.username}
+        db.password: ${db.password}
+        db.name:     ${db.name}
+        db.admin.username: ${db.admin.username}
+        db.admin.password: ${db.admin.password}
+        db.tablespace.dir: ${db.tablespace.dir}
+        db.tablespace.data: ${db.tablespace.data}
+        db.tablespace.index: ${db.tablespace.index}
+
+      dbc-products:
+        products:    ${db.products}
+        version:     ${db.product.version}
+        db.type:     ${db.type}
+        db.url:      ${db.url}
+        db.username: ${db.username}
+        db.password: ${db.password}
+        db.name:     ${db.name}
+    
+templates:
+  spm-tuneup:
+    description: SPM customizations
+    fixes: ${spm.fixes}
+    products:
+      SUM:
+
+  dbc:
+    description: DB Schema Management using DatabaseComponentConfigurator
+    products:
+      DatabaseComponentConfigurator:
+    fixes: ${dbc.fixes}
+
+provision:
+  default:
+    spm: ["${dbc.host}"]
+    dbc: ["${dbc.host}"]
+  dev:
+    spm: ["${dbc.alias}"]
+    dbc: ["${dbc.alias}"]
+
+nodes:
+  default:
+    default:
+      port:   ${spm.port}
+      secure: ${spm.secure}
+      bootstrapInfo:
+        installDir:   ${install.dir}
+        repoName:     ${repo.spm}                     
+        platform:     ${os.platform}
+        distribution: ${spm.distribution}
+        useImage:     ${spm.useImage}
+        port:         ${os.port}
+        credentials:
+          userName:   ${os.username}
+          password:   ${os.password}
+          authenticationMethod: ${os.auth.method}
+          privateKey: ${os.auth.key}
+  dev:
+    "${dbc.alias}":
+      host: ${dbc.host}

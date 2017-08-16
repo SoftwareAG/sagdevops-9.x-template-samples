@@ -1,0 +1,177 @@
+alias: um-layer
+description: Universal Messaging single server or two instance cluster layer
+version: 1.2
+changes:
+  - 1.0 Initial version shipped with 9.8
+  - 1.1 Removed support for devCluster environment type. Use cluster environment type instead.
+  - 1.2 License keys support, 
+
+# Examples:
+#  
+# 1) Provision dev UM server on local dev node @ localhost:8192 from webMethods-9.8_US repo
+# cc exec templates composite apply um-layer environment.type=dev repo.product=webMethods-9.8_US um.license.key.alias=UM98WinDesktop
+#
+# 2) Provision UM server on a remote host
+# cc exec templates composite apply um-layer environment.type=server um.host=host1 os.username=vmtest os.password=pass install.dir=/home/vmtest/sag um.license.key.alias=UM98Suse
+#
+# 3) Provision UM cluster on two remote hosts
+# cc exec templates composite apply um-layer environment.type=cluster um.host=host1 um.host2=host2 os.username=vmtest repo.product=webMethods-9.8_US um.license.key.alias=UM98Suse
+#
+
+environments:
+  
+  default:                                  # defaults
+    # product and fix repositories
+    version:      "9.10"
+    repo.product: webMethods-${version}     # source product repository name, must be pre-registered
+    repo.spm:     ${repo.product}           # source product repo for SPM
+    repo.fix:     Empower                   # source fix repository name, must be pre-registered
+    repo.fix.spm: ${repo.fix}               # source fix repo for SPM
+
+    # Remote system configuration 
+
+    os.platform:  LNXAMD64                  # remote machine OS platform code
+    os.username:  ${user.name}              # remote machine SSH username, default CCE process user account (as java system property)
+    os.password:  ${os.username}            # remote machine SSH password
+    os.auth.method: PASSWORD                # remote machine authentication method: PASSWORD,INTERACTIVE,CERTIFICATE
+    os.auth.key:  ${user.home}/.ssh/id_rsa  # default keyfile for CERTIFICATE auth method
+    os.port:      22                        # remote machine SSH port
+    install.dir:  /opt/softwareag           # suite installation directory
+
+    spm.port:       8092                    # SPM connection port
+    spm.secure:     false                   # Use HTTPS connection to SPM: true,false
+    spm.memory.max: 512                     # max mem
+    spm.configure:  [spm-tuneup]    
+    spm.fixes:      [wMFix.SPM]             # SPM/SUM/SD core fixes by default
+    spm.distribution: DEF                   # EXPERIMENTAL! distribution, ALL, DEF, MIN
+    spm.useImage:   true                    # EXPERIMENTAL! false for direct connection to the MASTER
+    
+    # UM Server Instance Configuration - use installer defaults
+    
+    um.host:             ${}                # REQUIRED: First instance hostname    
+    um.instance.port:    9000               # Primary port
+    um.memory.init:      256                # Initial memory size
+    um.memory.max:       1024               # Maximum memory size
+    um.memory.direct:    1G                 # Direct memory size
+    um.fixes:            ALL                # No fixes by default
+    um.configure:        [um-server]        # List of templates to apply to the first instance
+
+  dev:                                      # Single instance dev/test server
+    spm.alias:    dev                       # alias                  
+    spm.port:     8192                      # Non-default port number to avoid conflicts
+    os.platform:  ""                        # local platform
+    install.dir:  ${}                       # REQUIRED installation folder on local machine
+
+    um.host:             localhost          # Default on localhost
+    um.memory.init:      128
+    um.memory.max:       512
+    um.memory.direct:    512m
+
+  server:
+
+  cluster:                                  # Two-instance production cluster setup
+    um.configure:  [um-server, um-cluster]  # Configure server and cluster
+    um.host2:                               # REQUIRED: First instance hostname
+    um.cluster:          cluster            # Cluster name
+    
+layers:
+  default:
+    productRepo: ${repo.product}            # install products from
+    fixRepo:     ${repo.fix}                # install fixes from
+  spm:
+    description: Management layer of SPM's
+    templates:   ${spm.configure}
+    productRepo: ${repo.product}
+    fixRepo:     ${repo.fix.spm}
+  um:                                
+    description: Main messaging layer
+    templates:   ${um.configure}        
+
+templates:
+  spm-tuneup:
+    description: SPM customizations
+    fixes: ${spm.fixes}
+    products:
+      SUM:
+      NUMspm: # plugin
+
+  um-server:                                   
+    description: UM server instance
+    licenses:
+      "UniversalMessaging/server/templates/licence.xml": ${um.license.key.alias} 
+    fixes: ${um.fixes}
+    products:
+      NUMRealmServer:                                              # main UM product id
+        ${node.host}:                                              # instance realm name
+          instance.port: ${um.instance.port}                       # instance port
+          instance.ip:   ${node.host}
+          license.file:  UniversalMessaging/server/templates/licence.xml
+          runtimeComponentId: Universal-Messaging-${instance.name} # hint for CC to skip instance creation if it exists
+          configuration:
+            Universal-Messaging-${instance.name}: 
+              COMMON-MEMORY: &config                               # make a label to re-use configuraiton
+                COMMON-MEMORY:                                     # customize JVM memory
+                  InitSize: ${um.memory.init}
+                  MaxSize:  ${um.memory.max}
+                  ExtendedProperties:                              # extended JVM setting
+                    Property: 
+                      - 
+                       "@name": "-XX:MaxDirectMemorySize"
+                       $: ${um.memory.direct}
+
+  um-cluster:
+    description: Cluster configuration for two 9.10+ UM instances
+    products:
+      NUMRealmServer:
+        ${node.host}:
+          runtimeComponentId: Universal-Messaging-${instance.name} 
+          configuration:
+            Universal-Messaging-${instance.name}:
+              COMMON-CLUSTER:                       
+                COMMON-CLUSTER: &umClusterConfig   
+                  Name: ${um.cluster}
+                  Servers:                                      # two UM instances cluster
+                    Server:
+                      - 
+                        "@name": ${um.host}
+                        URL: "nsp://${um.host}:${um.instance.port}"
+                      - 
+                        "@name": ${um.host2}
+                        URL: "nsp://${um.host2}:${um.instance.port}"
+
+provision:      
+  default:
+    spm: ["${um.host}"]
+    um:  ["${um.host}"]
+  dev:                                      # single dev instance 
+    spm: ["${spm.alias}"]
+    um:  ["${spm.alias}"]
+  server:                                   # single remote instance
+    spm: ["${um.host}"]
+    um:  ["${um.host}"]
+  cluster:                                  # two clustered remote instances
+    spm: ["${um.host}", "${um.host2}"]
+    um:  ["${um.host}", "${um.host2}"]
+
+nodes:
+  default:
+    default:
+      port:   ${spm.port}
+      secure: ${spm.secure}
+      bootstrapInfo:
+        installDir:   ${install.dir}
+        repoName:     ${repo.spm}                     
+        platform:     ${os.platform}
+        distribution: ${spm.distribution}
+        useImage:     ${spm.useImage}
+        port:         ${os.port}
+        credentials:
+          userName:   ${os.username}
+          password:   ${os.password}
+          authenticationMethod: ${os.auth.method}
+          privateKey: ${os.auth.key}
+  
+  dev:
+    ${spm.alias}:
+      host: ${um.host}
+      

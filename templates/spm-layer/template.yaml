@@ -1,0 +1,100 @@
+alias: spm-layer
+description: SPM management layer
+version: 1.1
+changes:
+  - 1.0 Initial version shipped with 9.8
+  - 1.1 Better defaults os.username, parameterized os.auth.key, changed spm default list fix to wMFix.SPM
+
+environments:
+  default:                                  # defaults
+    # product and fix repositories
+    version:      "9.10"
+    repo.product: webMethods-${version}     # source product repository name, must be pre-registered
+    repo.spm:     ${repo.product}           # source product repo for SPM
+    repo.fix:     Empower                   # source fix repository name, must be pre-registered
+    repo.fix.spm: ${repo.fix}               # source fix repo for SPM
+
+    # Remote system configuration 
+
+    os.platform:  lnxamd64                  # remote machine OS platform code
+    os.username:  ${user.name}              # remote machine SSH username, default CCE process user account (as java system property)
+    os.password:  ${os.username}            # remote machine SSH password
+    os.auth.method: PASSWORD                # remote machine authentication method: PASSWORD,INTERACTIVE,CERTIFICATE
+    os.auth.key:  ${user.home}/.ssh/id_rsa  # default keyfile for CERTIFICATE auth method
+    os.port:      22                        # remote machine SSH port
+    install.dir:  /opt/softwareag           # suite installation directory
+
+    spm.port:       8092                    # SPM connection port
+    spm.secure:     false                   # Use HTTPS connection to SPM: true,false
+    spm.memory.max: 512                     # max mem
+    spm.configure:  [spm-tuneup]    
+    spm.fixes:      [wMFix.SPM]             # SPM/SUM/SD core fixes by default
+    spm.distribution: DEF                   # EXPERIMENTAL! distribution, ALL, DEF, MIN
+    spm.useImage:   true                    # EXPERIMENTAL! false for direct connection to the MASTER
+    
+  dev:
+    spm.host:     localhost                 # Could be localhost or a remote host     
+    spm.alias:    dev                       # Unique alias                  
+    spm.port:     8192                      # Non-default port number to avoid conflicts
+    os.platform:  ""                        # local platform
+    install.dir:  ${}                       # REQUIRED installation folder on local machine
+
+  server:
+    spm.host:     ${}                       # REQUIRED single host to bootstrap
+    
+  layer:
+    spm.hosts:    ${}                       # REQUIRED list of hosts [] to bootstrap            
+
+layers:
+  spm:
+    description: Management layer of SPM's
+    templates:   ${spm.configure}
+    productRepo: ${repo.product}
+    fixRepo:     ${repo.fix.spm}
+
+templates:
+  spm-tuneup:
+    description: SPM customizations
+    fixes: ${spm.fixes}
+    products:
+      SUM: # Ensure we have SUM installed
+      SPM:
+        default:                            # default instance
+          runtimeComponentId: OSGI-SPM
+          configuration:
+            OSGI-SPM:
+              COMMON-MEMORY:
+                COMMON-MEMORY:
+                  InitSize: 64
+                  MaxSize: ${spm.memory.max}
+
+provision:
+  default:
+    spm: ["${spm.host}"]
+  dev:
+    spm: ["${spm.alias}"]
+  server:
+    spm: ["${spm.host}"]
+  layer:
+    spm: ${spm.hosts}
+
+nodes:
+  default:
+    default:
+      port:   ${spm.port}
+      secure: ${spm.secure}
+      bootstrapInfo:
+        installDir:   ${install.dir}
+        repoName:     ${repo.spm}                     
+        platform:     ${os.platform}
+        distribution: ${spm.distribution}
+        useImage:     ${spm.useImage}
+        port:         ${os.port}
+        credentials:
+          userName:   ${os.username}
+          password:   ${os.password}
+          authenticationMethod: ${os.auth.method}
+          privateKey: ${os.auth.key}
+  dev:
+    ${spm.alias}:
+      host: ${spm.host}

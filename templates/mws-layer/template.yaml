@@ -1,0 +1,250 @@
+alias: mws-layer
+description: My webMethods Server single instance or a cluster
+version: 1.1
+changes:
+  - 1.0 Initial version shipped with 9.8
+  - 1.1 Removed dedicated variables for each MWS host for cluster environment. Use mws.hosts=[] array variable instead
+  - 1.2 9.10 added database management
+
+environments:
+  default:
+    # product and fix repositories
+    version:      "9.10"
+    repo.product: webMethods-${version}     # source product repository name, must be pre-registered
+    repo.spm:     ${repo.product}           # source product repo for SPM
+    repo.fix:     Empower                   # source fix repository name, must be pre-registered
+    repo.fix.spm: ${repo.fix}               # source fix repo for SPM
+
+    # Remote system configuration 
+
+    os.platform:  lnxamd64                  # remote machine OS platform code
+    os.username:  ${user.name}              # remote machine SSH username, default CCE process user account (as java system property)
+    os.password:  ${os.username}            # remote machine SSH password
+    os.auth.method: PASSWORD                # remote machine authentication method: PASSWORD,INTERACTIVE,CERTIFICATE
+    os.auth.key:  ${user.home}/.ssh/id_rsa  # default keyfile for CERTIFICATE auth method
+    os.port:      22                        # remote machine SSH port
+    install.dir:  /opt/softwareag           # suite installation directory
+
+    spm.port:       8092                    # SPM connection port
+    spm.secure:     false                   # Use HTTPS connection to SPM: true,false
+    spm.memory.max: 512                     # max mem
+    spm.configure:  [spm-tuneup]    
+    spm.fixes:      [wMFix.SPM]             # SPM/SUM/SD core fixes by default
+    spm.distribution: DEF                   # EXPERIMENTAL! distribution, ALL, DEF, MIN
+    spm.useImage:   true                    # EXPERIMENTAL! false for direct connection to the MASTER
+
+    dbc.alias:           local
+    dbc.host:            localhost
+    dbc.fixes:           ALL
+    dbc.configure:       [dbc]
+    
+    # Database connection
+    
+    db.type:             ${}                # REQUIRED: Database type: oracle,sqlserver,db2
+    db.host:             ${}                # REQUIRED: Database server hostname
+    db.port:             ${}                # REQUIRED: Database server port
+    db.name:             WEBM               # Database name
+    db.username:         ${db.name}         # Database username
+    db.password:         ${db.name}         # Database password
+    db.url:              "jdbc:wm:${db.type}://${db.host}:${db.port};databaseName=${db.name}"
+
+    # Database server admin connection for storage/user creation
+
+    db.admin.username:   ${}                # REQUIRED: for db storage only
+    db.admin.password:   ${}                # REQUIRED: for db storage only
+    db.tablespace.dir:   ${}                # for Oracle/DB2
+    db.tablespace.data:  WEBMDATA           # for Oracle/DB2
+    db.tablespace.index: WEBMINDX           # for Oracle/DB2
+
+    # Schemas
+    
+    db.components:       [STR]              # Storage and all components by default
+    db.products:         [MWS]                 
+    db.component.version: latest
+    db.product.version:   latest
+
+    # My webMethods Server
+    
+    mws.host:            ${}                # REQUIRED: 
+    mws.instance.name:   default
+    mws.http.port:       8585
+    mws.https.port:      8586
+    mws.jmx.port:        8587
+    mws.memory.init:     512                # memory configuration
+    mws.memory.max:      1024               # memory configuration
+    mws.password:        manage
+    mws.email:           admin@company.com
+    mws.fixes:           ALL
+    mws.lb.protocol:     http
+    mws.lb.host:         ${mws.host}
+    mws.lb.http.port:    ${mws.http.port}
+    mws.lb.https.port:   ${mws.https.port}
+    mws.configure:       [mws-server]
+    
+  dev:
+    spm.alias:    dev                       # alias                  
+    spm.port:     8192                      # Non-default port number to avoid conflicts
+    os.platform:  ""                        # local platform
+    install.dir:  ${}                       # REQUIRED installation folder on local machine
+
+    mws.host:            localhost
+    mws.memory.init:     128
+    mws.memory.max:      512
+
+  server:
+
+  cluster:
+    mws.hosts:           ["${mws.host}"]           
+
+layers:
+  default:
+    productRepo: ${repo.product}
+    fixRepo:     ${repo.fix}
+
+  spm:
+    description: Management layer of SPM's
+    templates:   ${spm.configure}
+    fixRepo:     ${repo.fix.spm}            # repo to install fixes from
+
+  dbc:
+    description: Database configuration
+    templates:   ${dbc.configure}
+    databases:
+      dbc-components:
+        components:  ${db.components}
+        version:     ${db.component.version}
+        db.type:     ${db.type}
+        db.url:      ${db.url}
+        db.username: ${db.username}
+        db.password: ${db.password}
+        db.name:     ${db.name}
+        db.admin.username: ${db.admin.username}
+        db.admin.password: ${db.admin.password}
+        db.tablespace.dir: ${db.tablespace.dir}
+        db.tablespace.data: ${db.tablespace.data}
+        db.tablespace.index: ${db.tablespace.index}
+
+      dbc-products:
+        products:    ${db.products}
+        version:     ${db.product.version}
+        db.type:     ${db.type}
+        db.url:      ${db.url}
+        db.username: ${db.username}
+        db.password: ${db.password}
+        db.name:     ${db.name}
+    
+  mws:
+    description: General purpose MWS layer
+    templates:   ${mws.configure}
+
+templates:
+
+# Platform Manager
+
+  spm-tuneup:
+    description: SPM customizations
+    fixes: ${spm.fixes}
+    products:
+      SUM:       # Ensure we have SUM installed
+      SPM:
+      MWSspm:
+
+# Database Configuration
+
+  dbc:
+    description: Database Configurator
+    products:
+      DatabaseComponentConfigurator:
+
+  mws-server:
+    description: MWS instance
+    fixes: ${mws.fixes}
+    products:
+      MwsProgramFiles: # MWS core product
+        ${mws.instance.name}: # MWS instance
+          node.name:   ${node.host} # unique cluster node name
+          http.port:   ${mws.http.port}
+          https.port:  ${mws.https.port}
+          jmx.port:    ${mws.jmx.port}
+          db.type:     ${db.type}
+          db.url:      "${db.url}"
+          db.username: ${db.username}
+          db.password: ${db.password}
+          configuration:
+            OSGI-MWS_${instance.name}:
+              COMMON-MEMORY:
+                COMMON-MEMORY:
+                  InitSize: ${mws.memory.init}
+                  MaxSize:  ${mws.memory.max}
+            MwsProgramFiles-${instance.name}:
+              COMMON-LOCAL-USERS:
+                COMMON-LOCAL-USERS-Administrator:
+                  "@id": Administrator
+                  Enabled: true
+                  FirstName: My webMethods Administrator
+                  LastName:  Administrator
+                  Email:     ${mws.email}
+                  Password:  ${mws.password}
+                COMMON-LOCAL-USERS-SysAdmin:
+                  "@id": SysAdmin
+                  Enabled: true
+                  FirstName: Sys Admin
+                  LastName:  Administrator
+                  Email:     ${mws.email}
+                  Password:  ${mws.password}
+              COMMON-CLUSTER:
+                COMMON-CLUSTER:
+                  ExtendedProperties:
+                    Property:
+                      -
+                        "@name": LoadBalancerHost
+                        $: ${mws.lb.host}
+                      -
+                        "@name": LoadBalancerHttpPort
+                        $: ${mws.lb.http.port}
+                      -
+                        "@name": LoadBalancerHttpsPort
+                        $: ${mws.lb.https.port}
+                      -
+                        "@name": jndiEnabled
+                        $: false
+            
+provision:                                  
+  default:
+    spm: ["${mws.host}"]
+    dbc: ["${dbc.alias}"]
+    mws: ["${mws.host}"]
+  dev:
+    spm: ["${spm.alias}"]
+    dbc: ["${dbc.alias}"]
+    mws: ["${spm.alias}"]
+  server:
+    spm: ["${mws.host}"]
+    dbc: ["${dbc.alias}"]
+    mws: ["${mws.host}"]
+  cluster:
+    spm: ${mws.hosts}
+    dbc: ["${dbc.alias}"]
+    mws: ${mws.hosts}
+
+nodes:
+  default:
+    default:
+      port:   ${spm.port}
+      secure: ${spm.secure}
+      bootstrapInfo:
+        installDir:   ${install.dir}
+        repoName:     ${repo.spm}                     
+        platform:     ${os.platform}
+        distribution: ${spm.distribution}
+        useImage:     ${spm.useImage}
+        port:         ${os.port}
+        credentials:
+          userName:   ${os.username}
+          password:   ${os.password}
+          authenticationMethod: ${os.auth.method}
+          privateKey: ${os.auth.key}
+  
+  dev:
+    ${spm.alias}:
+      host: ${mws.host}
