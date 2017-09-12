@@ -14,7 +14,7 @@ repositories and license key files.
 To get started fork and clone the project.
 
 ```bash
-git clone --recursive https://github.com/SoftwareAG/sagdevops-integrationserver.git
+git clone --recursive https://github.com/SoftwareAG/sagdevops-9.x-template-samples.git
 cd sagdevops-9.x-template-samples
 ant templates
 ```
