@@ -18,6 +18,7 @@ DO NOT MODIFY this template! Your changes WILL BE LOST.
 
 ## Limitations
 
+From release 10.4 this template works only for remote nodes.
 
 ## Use Cases
 
