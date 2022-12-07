@@ -1,4 +1,4 @@
-# Command Central template samples for 9.x release
+# !!!Archived!!! Command Central template samples for 9.x release
 
 These are default templates that used to be distributed with Command Central 9.x release.
 
